@@ -1,0 +1,68 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Frontend ###
+frontend-client/node_modules/
+frontend-client/dist/
+frontend-client/.env
+frontend-client/npm-debug.log*
+frontend-client/yarn-debug.log*
+frontend-client/yarn-error.log*
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Temp & Backups ###
+*.log
+*.tmp
+*.bak
+dump.rdb
+Redis-x64-3.0.504.msi
+Redis/
+$svc.log
+test-verify.ps1
+test-cart.ps1
+QA_API_TESTING_PLAN.md
+
+### Java ###
+target/
+.mvn/
+mvnw
+mvnw.cmd
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr

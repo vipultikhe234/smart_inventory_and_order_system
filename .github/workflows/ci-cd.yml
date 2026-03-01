@@ -1,0 +1,62 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+
+    - name: Build all microservices
+      run: mvn clean package -DskipTests
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend-client/package-lock.json
+
+    - name: Build frontend
+      run: |
+        cd frontend-client
+        npm install
+        npm run build
+
+  docker-build-push:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and Push Config Server
+      run: |
+        cd config-server
+        mvn clean package -DskipTests
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/smart-config-server:latest .
+        docker push ${{ secrets.DOCKER_USERNAME }}/smart-config-server:latest
+        
+    # (Repeat for other services: api-gateway, user-service, product-service, order-service, inventory-service, frontend-client)
