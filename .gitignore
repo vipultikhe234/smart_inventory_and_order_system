@@ -29,8 +29,10 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-### VS Code ###
-.vscode/
+### Local Secrets ###
+.env
+.env.local
+config-server/src/main/resources/configs/*secrets.yml
 
 ### Frontend ###
 frontend-client/node_modules/

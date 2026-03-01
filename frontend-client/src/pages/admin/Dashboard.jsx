@@ -12,7 +12,13 @@ import { getAllCategories, createCategory } from '../../services/categoryService
 import { createProduct, getAllProducts, deleteProduct } from '../../services/productService';
 import { getAllUsers, deleteUser, registerAdmin, getUserStats } from '../../services/userService';
 import { getAllInventory, updateStock, updateInventoryStatus, getInventoryStats } from '../../services/inventoryService';
-import { getAllOrders, updateOrderStatus, getOrderStats } from '../../services/orderService';
+import { getAllOrders, updateOrderStatus, getOrderStats, getSalesTrends } from '../../services/orderService';
+import { Line } from 'react-chartjs-2';
+import {
+    Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler
+} from 'chart.js';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 // Icons for a premium feel
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
@@ -89,16 +95,18 @@ const Dashboard = () => {
         totalOrders: 0,
         activeUsers: 0,
         lowStock: 0,
+        salesTrends: [],
         loading: false
     });
 
     const fetchDashboardStats = async () => {
         setDashboardStats(prev => ({ ...prev, loading: true }));
         try {
-            const [orderStats, userStats, inventoryStats] = await Promise.all([
+            const [orderStats, userStats, inventoryStats, trends] = await Promise.all([
                 getOrderStats(),
                 getUserStats(),
-                getInventoryStats()
+                getInventoryStats(),
+                getSalesTrends()
             ]);
 
             setDashboardStats({
@@ -106,6 +114,7 @@ const Dashboard = () => {
                 totalOrders: orderStats.totalOrders || 0,
                 activeUsers: userStats.totalUsers || 0,
                 lowStock: inventoryStats.lowStockCount || 0,
+                salesTrends: trends || [],
                 loading: false
             });
         } catch (error) {
@@ -467,7 +476,63 @@ const Dashboard = () => {
                             </Grid>
                         )}
 
-                        {/* Quick Actions or recent activity can go here */}
+                        {/* Recent Activity / Chart Section */}
+                        <Box mt={6} className="animate-fade-in">
+                            <Card className="glass-panel" sx={{ borderRadius: 6, p: 4 }}>
+                                <Box display="flex" justifyContent="space-between" mb={4}>
+                                    <Box>
+                                        <Typography variant="h6" fontWeight="bold">Revenue Intelligence</Typography>
+                                        <Typography variant="body2" color="text.secondary">Sales performance across the last 7 days</Typography>
+                                    </Box>
+                                    <Chip label="Real-time Beta" color="secondary" size="small" variant="outlined" />
+                                </Box>
+                                <Box height={400}>
+                                    <Line
+                                        data={{
+                                            labels: dashboardStats.salesTrends.map(t => t.date),
+                                            datasets: [{
+                                                label: 'Sales Revenue (₹)',
+                                                data: dashboardStats.salesTrends.map(t => t.total),
+                                                borderColor: '#6366f1',
+                                                backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                                                fill: true,
+                                                tension: 0.4,
+                                                pointRadius: 6,
+                                                pointBackgroundColor: '#fff',
+                                                pointBorderWidth: 3,
+                                                pointBorderColor: '#6366f1'
+                                            }]
+                                        }}
+                                        options={{
+                                            responsive: true,
+                                            maintainAspectRatio: false,
+                                            plugins: {
+                                                legend: { display: false },
+                                                tooltip: {
+                                                    backgroundColor: '#1e293b',
+                                                    padding: 12,
+                                                    titleFont: { size: 14, weight: 'bold' },
+                                                    bodyFont: { size: 13 },
+                                                    cornerRadius: 8,
+                                                    displayColors: false
+                                                }
+                                            },
+                                            scales: {
+                                                y: {
+                                                    beginAtZero: true,
+                                                    grid: { color: 'rgba(224, 224, 224, 0.4)', drawBorder: false },
+                                                    ticks: { color: '#64748b' }
+                                                },
+                                                x: {
+                                                    grid: { display: false },
+                                                    ticks: { color: '#64748b' }
+                                                }
+                                            }
+                                        }}
+                                    />
+                                </Box>
+                            </Card>
+                        </Box>
                     </Box>
                 )}
 

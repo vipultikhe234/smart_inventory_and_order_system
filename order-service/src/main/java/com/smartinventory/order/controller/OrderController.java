@@ -58,4 +58,9 @@ public class OrderController {
     public ResponseEntity<java.util.Map<String, Object>> getOrderStats() {
         return ResponseEntity.ok(orderService.getOrderStats());
     }
+
+    @GetMapping("/trends")
+    public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getSalesTrends() {
+        return ResponseEntity.ok(orderService.getSalesTrends());
+    }
 }

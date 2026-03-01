@@ -35,6 +35,6 @@ jwt:
 
 stripe:
   secret:
-    key: ${STRIPE_SECRET_KEY} # Provided via environment variable or local config
+    key: ${STRIPE_SECRET_KEY} # Provided via your local .env file when the services start
   client:
     url: http://localhost:3000

@@ -36,3 +36,8 @@ export const getOrderStats = async () => {
     const response = await api.get('/api/v1/orders/stats');
     return response.data;
 };
+
+export const getSalesTrends = async () => {
+    const response = await api.get('/api/v1/orders/trends');
+    return response.data;
+};

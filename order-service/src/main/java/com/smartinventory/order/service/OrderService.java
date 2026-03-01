@@ -13,4 +13,5 @@ public interface OrderService {
     List<OrderResponse> getAllOrders(com.smartinventory.order.entity.OrderStatus status);
     OrderResponse updateOrderStatus(Long orderId, com.smartinventory.order.entity.OrderStatus status);
     java.util.Map<String, Object> getOrderStats();
+    java.util.List<java.util.Map<String, Object>> getSalesTrends();
 }

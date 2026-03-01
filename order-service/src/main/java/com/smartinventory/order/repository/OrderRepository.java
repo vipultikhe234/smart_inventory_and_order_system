@@ -19,4 +19,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT SUM(o.totalAmount) FROM Order o WHERE o.status NOT IN (com.smartinventory.order.entity.OrderStatus.PENDING, com.smartinventory.order.entity.OrderStatus.CANCELLED)")
     BigDecimal sumTotalRevenue();
+
+    @Query(value = "SELECT DATE(created_at) as date, SUM(total_amount) as total FROM orders WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND status NOT IN ('PENDING', 'CANCELLED') GROUP BY DATE(created_at) ORDER BY date ASC", nativeQuery = true)
+    List<Object[]> getSalesTrends();
 }

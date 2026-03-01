@@ -81,6 +81,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public ProductResponse getProductById(Long id) {
+        log.info("### DB QUERY: Fetching single product ID {} from Database (Cache Miss) ###", id);
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
         return productMapper.toResponse(product);
@@ -89,6 +90,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Cacheable(value = "products", key = "#page + '-' + #size")
     public Page<ProductResponse> getAllProducts(int page, int size) {
+        log.info("### DB QUERY: Fetching products for page {} from Database (Cache Miss) ###", page);
         return productRepository.findAll(PageRequest.of(page, size))
                 .map(productMapper::toResponse);
     }

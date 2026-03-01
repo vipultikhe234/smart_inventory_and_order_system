@@ -10,6 +10,7 @@ import com.smartinventory.order.event.OrderPlacedEvent;
 import com.smartinventory.order.mapper.OrderMapper;
 import com.smartinventory.order.repository.OrderRepository;
 import com.smartinventory.order.service.OrderService;
+import com.smartinventory.order.constant.AppConstants;
 import com.stripe.Stripe;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.checkout.SessionCreateParams;
@@ -38,11 +39,9 @@ public class OrderServiceImpl implements OrderService {
     private final RestTemplate restTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    @Value("${stripe.secret.key}")
-    private String stripeSecretKey;
-
-    @Value("${stripe.client.url}")
-    private String clientUrl; // Success/Cancel redirect root url
+    // Stripe configuration loaded from AppConstants for security and flexibility
+    private final String stripeSecretKey = AppConstants.STRIPE_SECRET_KEY;
+    private final String clientUrl = AppConstants.STRIPE_CLIENT_URL;
 
     @PostConstruct
     public void init() {
@@ -230,5 +229,13 @@ public class OrderServiceImpl implements OrderService {
             "totalOrders", totalOrders,
             "totalRevenue", totalRevenue
         );
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<java.util.Map<String, Object>> getSalesTrends() {
+        return orderRepository.getSalesTrends().stream()
+                .map(row -> java.util.Map.of(
+                    "date", row[0].toString(),
+                    "total", row[1]
+                )).collect(Collectors.toList());
     }
 }
