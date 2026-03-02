@@ -229,6 +229,8 @@ public class OrderServiceImpl implements OrderService {
             "totalOrders", totalOrders,
             "totalRevenue", totalRevenue
         );
+    }
+
     @Override
     @Transactional(readOnly = true)
     public java.util.List<java.util.Map<String, Object>> getSalesTrends() {
