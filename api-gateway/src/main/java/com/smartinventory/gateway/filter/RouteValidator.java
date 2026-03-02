@@ -25,9 +25,11 @@ public class RouteValidator {
                     return false;
                 }
                 
-                // Allow public read access to products and categories
-                if (request.getMethod() == HttpMethod.GET && 
-                   (path.startsWith("/api/v1/products") || path.startsWith("/api/v1/categories"))) {
+                // Allow public read access to products, categories, and inventory
+                if (request.getMethod() == HttpMethod.GET &&
+                   (path.startsWith("/api/v1/products") ||
+                    path.startsWith("/api/v1/categories") ||
+                    path.startsWith("/api/v1/inventory"))) {
                     return false;
                 }
                 

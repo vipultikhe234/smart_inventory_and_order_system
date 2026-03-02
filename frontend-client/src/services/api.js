@@ -30,11 +30,18 @@ api.interceptors.response.use(
     },
     (error) => {
         if (error.response && error.response.status === 401) {
-            // Clear local storage and redirect to login if token is expired/invalid
+            // Clear local storage
             localStorage.removeItem('token');
             localStorage.removeItem('role');
             localStorage.removeItem('username');
-            window.location.href = '/login';
+
+            // ONLY redirect to login if we are NOT on a public page
+            const publicPaths = ['/', '/login', '/register'];
+            const currentPath = window.location.pathname;
+
+            if (!publicPaths.includes(currentPath)) {
+                window.location.href = '/login';
+            }
         }
         return Promise.reject(error);
     }

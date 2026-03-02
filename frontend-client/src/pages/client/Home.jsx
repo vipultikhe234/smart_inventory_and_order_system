@@ -10,9 +10,11 @@ import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined';
-import { Badge, Snackbar } from '@mui/material';
+import { Badge, Snackbar, Tooltip } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
 import { useDispatch, useSelector } from 'react-redux';
-import { addToCart } from '../../features/cartSlice';
+import { addToCart, incrementInCart, removeFromCart, fetchCart } from '../../features/cartSlice';
 import { logout } from '../../features/authSlice';
 import { getAllProducts } from '../../services/productService';
 import { getAllInventory } from '../../services/inventoryService';
@@ -36,23 +38,42 @@ const Home = () => {
 
     const fetchProducts = async () => {
         try {
-            // Fetch both products and full inventory list
-            const [productData, inventoryData] = await Promise.all([
-                getAllProducts(0, 50), // Fetch more to allow for filtering
+            // Use allSettled so one failing API doesn't block the whole page
+            const [productResult, inventoryResult] = await Promise.allSettled([
+                getAllProducts(0, 50),
                 getAllInventory()
             ]);
 
-            const allProducts = productData.content || [];
+            if (productResult.status === 'rejected') {
+                console.error('Products API failed:', productResult.reason);
+                setError('Failed to load available products. Please try again later.');
+                setLoading(false);
+                return;
+            }
 
-            // Filter: Only show products that are IN STOCK (> 0) and ACTIVE
-            const availableProducts = allProducts.filter(product => {
-                const invItem = inventoryData.find(inv => inv.productId === product.id);
-                // If no inventory record, default to 0 units/ACTIVE (but we don't show 0 units)
-                if (!invItem) return false;
-                return invItem.status === 'ACTIVE' && invItem.quantity > 0;
-            });
+            const allProducts = productResult.value?.content || [];
+            const inventoryData = inventoryResult.status === 'fulfilled' ? inventoryResult.value : [];
 
-            setProducts(availableProducts.slice(0, 8)); // Limit to first 8 for display
+            if (inventoryResult.status === 'rejected') {
+                console.warn('Inventory API failed, showing all products:', inventoryResult.reason);
+            }
+
+            // If inventory is available, filter by stock. Otherwise show all products.
+            const availableProducts = inventoryData.length > 0
+                ? allProducts.filter(product => {
+                    const invItem = inventoryData.find(inv => inv.productId === product.id);
+                    if (!invItem) return false;
+                    return invItem.status === 'ACTIVE' && invItem.quantity > 0;
+                })
+                : allProducts;
+
+            setProducts(availableProducts.slice(0, 8));
+
+            // Only fetch cart if authenticated to avoid 401 redirects
+            if (isAuthenticated) {
+                dispatch(fetchCart());
+            }
+
             setLoading(false);
         } catch (err) {
             console.error('Home page loading error:', err);
@@ -63,11 +84,33 @@ const Home = () => {
 
     const handleAddToCart = (product) => {
         if (!isAuthenticated) {
+            sessionStorage.setItem('pendingCartItem', JSON.stringify(product));
             navigate('/login');
             return;
         }
         dispatch(addToCart(product));
         setSnackbar(true);
+    };
+
+    const handleIncrement = (productId) => {
+        if (!isAuthenticated) {
+            navigate('/login');
+            return;
+        }
+        dispatch(incrementInCart(productId));
+    };
+
+    const handleDecrement = (productId) => {
+        if (!isAuthenticated) {
+            navigate('/login');
+            return;
+        }
+        dispatch(removeFromCart(productId));
+    };
+
+    const getProductQuantity = (productId) => {
+        const item = cartData?.items?.find(i => i.productId === productId);
+        return item ? item.quantity : 0;
     };
 
     return (
@@ -232,36 +275,76 @@ const Home = () => {
                     {error && <Alert severity="error" sx={{ borderRadius: 4 }}>{error}</Alert>}
 
                     <Grid container spacing={4}>
-                        {!loading && !error && products.map((product) => (
-                            <Grid item key={product.id} xs={12} sm={6} md={3}>
-                                <Card className="glass-panel card-hover" sx={{ height: '100%', overflow: 'hidden' }}>
-                                    <Box sx={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#f8fafc', fontSize: 60 }}>
-                                        📦
-                                    </Box>
-                                    <CardContent>
-                                        <Typography variant="h6" fontWeight="700" noWrap gutterBottom>{product.name}</Typography>
-                                        <Typography variant="body2" color="text.secondary" sx={{ height: 40, overflow: 'hidden', mb: 2 }}>
-                                            {product.description}
-                                        </Typography>
-                                        <Typography variant="h6" color="primary" fontWeight="800">
-                                            ₹{product.price}
-                                        </Typography>
-                                    </CardContent>
-                                    <CardActions sx={{ p: 2, pt: 0 }}>
-                                        <Button
-                                            fullWidth
-                                            variant="contained"
-                                            className="premium-btn"
-                                            sx={{ py: 1 }}
-                                            startIcon={<ShoppingCartOutlinedIcon />}
-                                            onClick={() => handleAddToCart(product)}
-                                        >
-                                            Add to Cart
-                                        </Button>
-                                    </CardActions>
-                                </Card>
-                            </Grid>
-                        ))}
+                        {!loading && !error && products.map((product) => {
+                            const quantity = getProductQuantity(product.id);
+                            return (
+                                <Grid item key={product.id} xs={12} sm={6} md={3}>
+                                    <Card className="glass-panel card-hover" sx={{ height: '100%', overflow: 'hidden' }}>
+                                        <Box sx={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#f8fafc', fontSize: 60 }}>
+                                            📦
+                                        </Box>
+                                        <CardContent>
+                                            <Typography variant="h6" fontWeight="700" noWrap gutterBottom>{product.name}</Typography>
+                                            <Typography variant="body2" color="text.secondary" sx={{ height: 40, overflow: 'hidden', mb: 2 }}>
+                                                {product.description}
+                                            </Typography>
+                                            <Typography variant="h6" color="primary" fontWeight="800">
+                                                ₹{product.price}
+                                            </Typography>
+                                        </CardContent>
+                                        <CardActions sx={{ p: 2, pt: 0 }}>
+                                            {quantity > 0 ? (
+                                                <Stack
+                                                    direction="row"
+                                                    alignItems="center"
+                                                    justifyContent="space-between"
+                                                    sx={{
+                                                        width: '100%',
+                                                        bgcolor: '#f1f5f9',
+                                                        borderRadius: 3,
+                                                        p: 0.5,
+                                                        border: '1px solid #e2e8f0'
+                                                    }}
+                                                >
+                                                    <IconButton
+                                                        size="small"
+                                                        color="primary"
+                                                        onClick={() => handleDecrement(product.id)}
+                                                        sx={{ bgcolor: 'white', '&:hover': { bgcolor: '#eef2ff' } }}
+                                                    >
+                                                        <RemoveIcon fontSize="small" />
+                                                    </IconButton>
+
+                                                    <Typography fontWeight="bold" sx={{ fontSize: '1.1rem' }}>
+                                                        {quantity}
+                                                    </Typography>
+
+                                                    <IconButton
+                                                        size="small"
+                                                        color="primary"
+                                                        onClick={() => handleIncrement(product.id)}
+                                                        sx={{ bgcolor: 'white', '&:hover': { bgcolor: '#eef2ff' } }}
+                                                    >
+                                                        <AddIcon fontSize="small" />
+                                                    </IconButton>
+                                                </Stack>
+                                            ) : (
+                                                <Button
+                                                    fullWidth
+                                                    variant="contained"
+                                                    className="premium-btn"
+                                                    sx={{ py: 1 }}
+                                                    startIcon={<ShoppingCartOutlinedIcon />}
+                                                    onClick={() => handleAddToCart(product)}
+                                                >
+                                                    Add to Cart
+                                                </Button>
+                                            )}
+                                        </CardActions>
+                                    </Card>
+                                </Grid>
+                            );
+                        })}
                     </Grid>
                 </Container>
             </Box>
