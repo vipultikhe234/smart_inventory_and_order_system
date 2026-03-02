@@ -4,112 +4,169 @@ import { loginUser } from '../../services/authService';
 import { loginSuccess } from '../../features/authSlice';
 import { addToCart } from '../../features/cartSlice';
 import { useNavigate, Link } from 'react-router-dom';
-import { Box, TextField, Button, Typography, Container, Card, CardContent, InputAdornment } from '@mui/material';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import {
+    Box, TextField, Button, Typography, InputAdornment, Divider, Alert
+} from '@mui/material';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 
 const Login = () => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const [formData, setFormData] = useState({ username: '', password: '' });
     const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setLoading(true);
+        setError(null);
         try {
             const resp = await loginUser(formData);
-            dispatch(loginSuccess({
-                token: resp.token,
-                role: resp.role || 'ROLE_CUSTOMER', // defaulting for mock/test
-                username: formData.username
-            }));
+            dispatch(loginSuccess({ token: resp.token, role: resp.role || 'ROLE_CUSTOMER', username: formData.username }));
             if (resp.role === 'ROLE_ADMIN') {
                 navigate('/admin/dashboard');
             } else {
-                // Check for pending cart item from Home page
-                const pendingItem = sessionStorage.getItem('pendingCartItem');
-                if (pendingItem) {
-                    dispatch(addToCart(JSON.parse(pendingItem)));
+                const pending = sessionStorage.getItem('pendingCartItem');
+                if (pending) {
+                    dispatch(addToCart(JSON.parse(pending)));
                     sessionStorage.removeItem('pendingCartItem');
-                    navigate('/cart'); // Direct to cart to complete checkout
+                    navigate('/cart');
                 } else {
                     navigate('/');
                 }
             }
-        } catch (err) {
-            setError('Invalid username or password.');
+        } catch {
+            setError('Invalid credentials. Please try again.');
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
-        <Container maxWidth="sm" sx={{ mt: 8 }}>
-            <Card className="glass-panel" sx={{ borderRadius: 6, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-                <CardContent sx={{ p: { xs: 4, md: 6 } }}>
-                    <Box display="flex" flexDirection="column" alignItems="center" mb={4}>
-                        <Box sx={{ p: 2, borderRadius: '50%', bgcolor: 'primary.main', mb: 2 }}>
-                            <LockOutlinedIcon sx={{ color: 'white', fontSize: 32 }} />
+        <Box sx={{
+            minHeight: '100vh', bgcolor: '#0d0d14',
+            display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }
+        }}>
+            {/* Left Panel — Branding */}
+            <Box sx={{
+                display: { xs: 'none', md: 'flex' },
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                bgcolor: '#0f0f1a',
+                borderRight: '1px solid rgba(255,255,255,0.06)',
+                p: 6
+            }}>
+                <Box>
+                    <Typography fontWeight="800" sx={{ color: '#e2e8f0', letterSpacing: '-0.02em', fontSize: '1.15rem' }}>
+                        SMART<span style={{ color: '#a78bfa' }}>STORE</span>
+                    </Typography>
+                </Box>
+                <Box>
+                    {/* Feature bullets */}
+                    {[
+                        { icon: '⚡', text: 'Real-time inventory tracking' },
+                        { icon: '🔒', text: 'Secure payments via Stripe' },
+                        { icon: '📦', text: 'Order history & tracking' },
+                        { icon: '🛒', text: 'Smart cart management' },
+                    ].map((f) => (
+                        <Box key={f.text} display="flex" alignItems="center" gap={2} mb={3}>
+                            <Box sx={{
+                                width: 36, height: 36, borderRadius: '6px',
+                                bgcolor: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18
+                            }}>
+                                {f.icon}
+                            </Box>
+                            <Typography sx={{ color: '#64748b', fontSize: '0.875rem', fontWeight: 500 }}>{f.text}</Typography>
                         </Box>
-                        <Typography variant="h3" fontWeight="800" gutterBottom>Welcome Back</Typography>
-                        <Typography color="text.secondary">Enter your credentials to access your store</Typography>
+                    ))}
+                </Box>
+                <Typography sx={{ color: '#1e293b', fontSize: '0.78rem' }}>
+                    © 2025 SmartStore Inc.
+                </Typography>
+            </Box>
+
+            {/* Right Panel — Form */}
+            <Box sx={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                p: { xs: 4, md: 8 }
+            }}>
+                <Box sx={{ width: '100%', maxWidth: 380 }} className="animate-in">
+                    {/* Mobile logo */}
+                    <Typography fontWeight="800" sx={{ color: '#e2e8f0', letterSpacing: '-0.02em', fontSize: '1.1rem', mb: 8, display: { md: 'none' } }}>
+                        SMART<span style={{ color: '#a78bfa' }}>STORE</span>
+                    </Typography>
+
+                    <Box mb={7}>
+                        <Typography variant="h4" fontWeight="800" sx={{ color: '#e2e8f0', letterSpacing: '-0.03em', mb: 1 }}>
+                            Welcome back
+                        </Typography>
+                        <Typography sx={{ color: '#475569', fontSize: '0.9rem' }}>
+                            Sign in to your account to continue
+                        </Typography>
                     </Box>
 
-                    {error && <Box mb={3} sx={{ p: 2, bgcolor: 'rgba(239, 68, 68, 0.1)', borderRadius: 2, border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', textAlign: 'center' }}>{error}</Box>}
+                    {error && (
+                        <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
+                    )}
 
                     <form onSubmit={handleSubmit}>
-                        <Box mb={3}>
+                        <Box mb={2.5}>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', mb: 1, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                                Username
+                            </Typography>
                             <TextField
-                                fullWidth
-                                label="Username"
+                                fullWidth required size="small"
+                                placeholder="your_username"
                                 value={formData.username}
-                                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                                required
+                                onChange={e => setFormData({ ...formData, username: e.target.value })}
                                 InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <PersonOutlineIcon sx={{ color: 'text.secondary' }} />
-                                        </InputAdornment>
-                                    ),
-                                    sx: { borderRadius: 3 }
+                                    startAdornment: <InputAdornment position="start"><PersonOutlineIcon sx={{ fontSize: 17, color: '#334155' }} /></InputAdornment>
                                 }}
                             />
                         </Box>
                         <Box mb={4}>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', mb: 1, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                                Password
+                            </Typography>
                             <TextField
-                                fullWidth
-                                label="Password"
-                                type="password"
+                                fullWidth required size="small" type="password"
+                                placeholder="••••••••"
                                 value={formData.password}
-                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                required
+                                onChange={e => setFormData({ ...formData, password: e.target.value })}
                                 InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <LockOutlinedIcon sx={{ color: 'text.secondary' }} />
-                                        </InputAdornment>
-                                    ),
-                                    sx: { borderRadius: 3 }
+                                    startAdornment: <InputAdornment position="start"><LockOutlinedIcon sx={{ fontSize: 17, color: '#334155' }} /></InputAdornment>
                                 }}
                             />
                         </Box>
+
                         <Button
-                            fullWidth
-                            variant="contained"
-                            type="submit"
-                            size="large"
-                            className="premium-btn"
-                            sx={{ py: 2, fontSize: '1.1rem' }}
+                            fullWidth type="submit" variant="contained" color="primary"
+                            disabled={loading} size="large"
+                            endIcon={<KeyboardArrowRightIcon />}
+                            sx={{ py: 1.4, fontSize: '0.9rem', letterSpacing: '-0.01em', fontWeight: 700 }}
                         >
-                            Sign In
+                            {loading ? 'Signing in...' : 'Continue'}
                         </Button>
                     </form>
-                    <Box mt={3} textAlign="center">
-                        <Typography variant="body2">
-                            Don't have an account? <Link to="/register">Register here</Link>
+
+                    <Divider sx={{ my: 4, borderColor: 'rgba(255,255,255,0.06)' }}>
+                        <Typography sx={{ color: '#334155', fontSize: '0.78rem', px: 2 }}>OR</Typography>
+                    </Divider>
+
+                    <Box sx={{ p: 3, border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', bgcolor: 'rgba(255,255,255,0.015)' }}>
+                        <Typography sx={{ color: '#475569', fontSize: '0.875rem', mb: 0 }}>
+                            Don't have an account?{' '}
+                            <Link to="/register" style={{ color: '#a78bfa', fontWeight: 600, textDecoration: 'none' }}>
+                                Create one for free →
+                            </Link>
                         </Typography>
                     </Box>
-                </CardContent>
-            </Card>
-        </Container>
+                </Box>
+            </Box>
+        </Box>
     );
 };
 

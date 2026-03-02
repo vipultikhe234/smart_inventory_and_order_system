@@ -1,13 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import {
-    Box, Container, Typography, Grid, Paper, Chip, Divider,
-    CircularProgress, Alert, Stack, IconButton, Button, Tabs, Tab
+    Box, Container, Typography, Grid, CircularProgress,
+    Alert, Stack, IconButton, Button, Divider, Tooltip
 } from '@mui/material';
 import { useDispatch } from 'react-redux';
 import { clearCart } from '../../features/cartSlice';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getUserOrders, verifyPayment } from '../../services/orderService';
+import { getAllInventory, updateStock } from '../../services/inventoryService';
+
+const STATUS = {
+    PAID: { label: 'Paid', color: '#34d399', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)' },
+    CONFIRMED: { label: 'Confirmed', color: '#a78bfa', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)' },
+    SHIPPED: { label: 'Shipped', color: '#38bdf8', bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.2)' },
+    DELIVERED: { label: 'Delivered', color: '#34d399', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)' },
+    PENDING: { label: 'Pending', color: '#fbbf24', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.2)' },
+    CANCELLED: { label: 'Cancelled', color: '#f87171', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.2)' },
+};
+
+const FILTERS = ['ALL', 'PENDING', 'CONFIRMED', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
 
 const MyOrders = () => {
     const navigate = useNavigate();
@@ -17,165 +31,250 @@ const MyOrders = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [message, setMessage] = useState(location.state?.message || null);
-    const [selectedStatus, setSelectedStatus] = useState('ALL');
+    const [filter, setFilter] = useState('ALL');
 
     useEffect(() => {
-        const queryParams = new URLSearchParams(location.search);
-        const sessionId = queryParams.get('session_id');
-
-        if (sessionId) {
-            handleVerifyPayment(sessionId);
-        } else {
-            fetchOrders();
-        }
+        const sid = new URLSearchParams(location.search).get('session_id');
+        if (sid) handleVerify(sid); else fetchOrders();
     }, [location.search]);
 
-    const handleVerifyPayment = async (sessionId) => {
-        setLoading(true);
+    const handleVerify = async (sid) => {
         try {
-            await verifyPayment(sessionId);
-            setMessage('Payment successful! Your order has been placed.');
+            await verifyPayment(sid);
+            setMessage('Payment successful. Your order has been confirmed.');
             dispatch(clearCart());
-            // Clear the query params after verification
+            // Decrement inventory based on the latest order
+            await decrementInventoryForLatestOrder();
             navigate('/orders', { replace: true });
-        } catch (err) {
-            console.error('Payment verification error:', err);
-            setError('Failed to verify payment. Please contact support.');
-            fetchOrders();
+        } catch { setError('Payment verification failed.'); fetchOrders(); }
+    };
+
+    // Helper to decrement inventory for the most recent order
+    const decrementInventoryForLatestOrder = async () => {
+        try {
+            // Get latest order (assuming highest id is most recent)
+            const orders = await getUserOrders();
+            if (!orders || orders.length === 0) return;
+            const latest = orders.reduce((a, b) => (a.id > b.id ? a : b));
+            // Load current inventory
+            const inventory = await getAllInventory();
+            // For each item, update quantity
+            await Promise.all(latest.items.map(async (item) => {
+                const inv = inventory.find(i => i.productId === item.productId);
+                if (!inv) return;
+                const newQty = Math.max(0, inv.quantity - item.quantity);
+                await updateStock({ productId: item.productId, quantity: newQty, status: inv.status });
+            }));
+        } catch (e) {
+            console.error('Failed to decrement inventory:', e);
         }
     };
 
     const fetchOrders = async () => {
         try {
             const data = await getUserOrders();
-            // Sort by latest first
             setOrders(data.sort((a, b) => b.id - a.id));
-            setLoading(false);
-        } catch (err) {
-            console.error('Fetch orders error:', err);
-            setError('Failed to load your orders.');
-            setLoading(false);
-        }
+        } catch { setError('Failed to load orders.'); }
+        finally { setLoading(false); }
     };
 
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'PAID': return 'success';
-            case 'CONFIRMED': return 'primary';
-            case 'SHIPPED': return 'info';
-            case 'PENDING': return 'warning';
-            case 'CANCELLED': return 'error';
-            case 'DELIVERED': return 'success';
-            default: return 'secondary';
-        }
-    };
-
-    const handleStatusChange = (event, newValue) => {
-        setSelectedStatus(newValue);
-    };
-
-    const filteredOrders = selectedStatus === 'ALL'
-        ? orders
-        : orders.filter(order => order.status === selectedStatus);
+    const filtered = filter === 'ALL' ? orders : orders.filter(o => o.status === filter);
+    const countFor = (s) => s === 'ALL' ? orders.length : orders.filter(o => o.status === s).length;
 
     return (
-        <Container maxWidth="lg" sx={{ py: 6 }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2} mb={4}>
-                <Box display="flex" alignItems="center">
-                    <IconButton onClick={() => navigate('/')} sx={{ mr: 2 }}>
-                        <ArrowBackIcon />
-                    </IconButton>
-                    <Typography variant="h4" fontWeight="bold">My Order History</Typography>
-                </Box>
-                <Tabs
-                    value={selectedStatus}
-                    onChange={handleStatusChange}
-                    variant="scrollable"
-                    scrollButtons="auto"
-                    sx={{
-                        '& .MuiTabs-indicator': { height: 3, borderRadius: '3px 3px 0 0' },
-                        '& .MuiTab-root': { fontWeight: 'bold', minWidth: 100 }
-                    }}
-                >
-                    <Tab label="All Orders" value="ALL" />
-                    <Tab label="Pending" value="PENDING" />
-                    <Tab label="Confirmed" value="CONFIRMED" />
-                    <Tab label="Paid" value="PAID" />
-                    <Tab label="Shipped" value="SHIPPED" />
-                    <Tab label="Delivered" value="DELIVERED" />
-                    <Tab label="Cancelled" value="CANCELLED" />
-                </Tabs>
+        <Box sx={{ minHeight: '100vh', bgcolor: '#0d0d14' }} className="page-container">
+            <Box className="top-accent-bar" />
+
+            {/* ── HEADER ──────────────────────────────────────── */}
+            <Box sx={{ bgcolor: '#0f0f1a', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <Container maxWidth="lg">
+                    <Box display="flex" alignItems="center" justifyContent="space-between" py={2.5} flexWrap="wrap" gap={2}>
+                        <Box display="flex" alignItems="center" gap={2}>
+                            <IconButton size="small" onClick={() => navigate('/')} sx={{
+                                color: '#64748b', border: '1px solid rgba(255,255,255,0.07)',
+                                borderRadius: '6px', p: 0.8,
+                                '&:hover': { color: '#e2e8f0', borderColor: 'rgba(255,255,255,0.15)' }
+                            }}>
+                                <ArrowBackIcon sx={{ fontSize: 17 }} />
+                            </IconButton>
+                            <Box>
+                                <Typography fontWeight="700" sx={{ color: '#e2e8f0', letterSpacing: '-0.01em' }}>My Orders</Typography>
+                                <Typography variant="caption" sx={{ color: '#334155' }}>{orders.length} total orders</Typography>
+                            </Box>
+                        </Box>
+
+                        {/* Filter pills */}
+                        <Stack direction="row" sx={{ bgcolor: '#0d0d14', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', overflow: 'hidden' }}>
+                            {FILTERS.map(f => {
+                                const c = countFor(f);
+                                if (f !== 'ALL' && c === 0) return null;
+                                const active = filter === f;
+                                return (
+                                    <Box key={f} onClick={() => setFilter(f)} sx={{
+                                        px: 2, py: 1, cursor: 'pointer', fontSize: '0.78rem', fontWeight: active ? 700 : 500,
+                                        color: active ? '#e2e8f0' : '#334155',
+                                        bgcolor: active ? '#1a1a2e' : 'transparent',
+                                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                                        transition: 'all 0.15s',
+                                        '&:last-child': { borderRight: 'none' },
+                                        '&:hover': { color: '#94a3b8' }
+                                    }}>
+                                        {f.charAt(0) + f.slice(1).toLowerCase()}{' '}
+                                        <span style={{ opacity: 0.45, marginLeft: 2 }}>{c}</span>
+                                    </Box>
+                                );
+                            })}
+                        </Stack>
+                    </Box>
+                </Container>
             </Box>
 
-            {message && <Alert severity="success" sx={{ mb: 3, borderRadius: 3 }}>{message}</Alert>}
-            {error && <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>{error}</Alert>}
+            {/* ── BODY ────────────────────────────────────────── */}
+            <Container maxWidth="lg" sx={{ py: 5 }}>
+                {message && <Alert severity="success" sx={{ mb: 4 }}>{message}</Alert>}
+                {error && <Alert severity="error" sx={{ mb: 4 }}>{error}</Alert>}
 
-            {loading ? (
-                <Box display="flex" justifyContent="center" py={10}>
-                    <CircularProgress />
-                </Box>
-            ) : filteredOrders.length === 0 ? (
-                <Paper sx={{ p: 10, textAlign: 'center', bgcolor: '#f1f5f9', borderRadius: 5 }}>
-                    <Typography variant="h6" color="text.secondary">
-                        {selectedStatus === 'ALL'
-                            ? "You haven't placed any orders yet."
-                            : `No ${selectedStatus.toLowerCase()} orders found.`}
-                    </Typography>
-                    {selectedStatus === 'ALL' && (
-                        <Button sx={{ mt: 3 }} variant="outlined" onClick={() => navigate('/')}>Go Shopping</Button>
-                    )}
-                </Paper>
-            ) : (
-                <Stack spacing={4}>
-                    {filteredOrders.map((order) => (
-                        <Paper key={order.id} elevation={0} className="glass-panel" sx={{ p: 4, borderRadius: 5, border: '1px solid #e2e8f0' }}>
-                            <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
-                                <Box>
-                                    <Typography variant="h6" fontWeight="bold">Order #{order.id}</Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        Placed on {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
-                                    </Typography>
-                                </Box>
-                                <Chip
-                                    label={order.status}
-                                    color={getStatusColor(order.status)}
-                                    sx={{ fontWeight: 'bold' }}
-                                />
-                            </Box>
+                {loading ? (
+                    <Box display="flex" justifyContent="center" py={12}>
+                        <CircularProgress size={32} sx={{ color: '#7c3aed' }} />
+                    </Box>
+                ) : filtered.length === 0 ? (
+                    <Box textAlign="center" py={14} className="animate-in">
+                        <Box sx={{
+                            width: 72, height: 72, borderRadius: '8px',
+                            bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 4
+                        }}>
+                            <ShoppingBagOutlinedIcon sx={{ fontSize: 30, color: '#1e293b' }} />
+                        </Box>
+                        <Typography fontWeight="700" sx={{ color: '#64748b', fontSize: '1rem', mb: 1 }}>
+                            {filter === 'ALL' ? 'No orders yet' : `No ${filter.toLowerCase()} orders`}
+                        </Typography>
+                        <Typography sx={{ color: '#1e293b', fontSize: '0.875rem', mb: 5 }}>
+                            {filter === 'ALL' ? 'Place your first order to see it here.' : 'Use the filter above to browse other statuses.'}
+                        </Typography>
+                        {filter === 'ALL' && (
+                            <Button variant="contained" color="primary" onClick={() => navigate('/')} endIcon={<KeyboardArrowRightIcon />}>
+                                Shop now
+                            </Button>
+                        )}
+                    </Box>
+                ) : (
+                    <Stack spacing={2}>
+                        {/* Column header row */}
+                        <Box sx={{
+                            display: { xs: 'none', md: 'grid' },
+                            gridTemplateColumns: '1fr 1fr 120px 120px',
+                            gap: 3, pb: 1.5, px: 3,
+                            borderBottom: '1px solid rgba(255,255,255,0.06)'
+                        }}>
+                            {['Order', 'Items', 'Status', 'Total'].map(h => (
+                                <Typography key={h} sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#334155', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                                    {h}
+                                </Typography>
+                            ))}
+                        </Box>
 
-                            <Divider sx={{ my: 3 }} />
+                        {filtered.map((order, idx) => {
+                            const s = STATUS[order.status] || { label: order.status, color: '#64748b', bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.1)' };
+                            return (
+                                <Box
+                                    key={order.id}
+                                    className="animate-in"
+                                    sx={{
+                                        bgcolor: '#13131f', border: '1px solid rgba(255,255,255,0.06)',
+                                        borderRadius: '8px', overflow: 'hidden',
+                                        animationDelay: `${idx * 0.04}s`,
+                                        transition: 'border-color 0.18s',
+                                        '&:hover': { borderColor: 'rgba(255,255,255,0.1)' }
+                                    }}
+                                >
+                                    {/* Order row desktop */}
+                                    <Box sx={{
+                                        display: { xs: 'none', md: 'grid' },
+                                        gridTemplateColumns: '1fr 1fr 120px 120px',
+                                        gap: 3, alignItems: 'center', px: 3, py: 2.5
+                                    }}>
+                                        {/* Order info */}
+                                        <Box>
+                                            <Typography fontWeight="700" sx={{ color: '#e2e8f0', fontSize: '0.875rem', letterSpacing: '-0.01em' }}>
+                                                #{order.id}
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ color: '#334155' }}>
+                                                {order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                            </Typography>
+                                        </Box>
 
-                            <Grid container spacing={4}>
-                                <Grid item xs={12} md={8}>
-                                    <Typography variant="subtitle1" fontWeight="bold" gutterBottom>Purchased Items</Typography>
-                                    <Stack spacing={2} sx={{ mt: 1 }}>
-                                        {order.items?.map((item, idx) => (
-                                            <Box key={idx} display="flex" justifyContent="space-between" alignItems="center">
-                                                <Typography variant="body1">
-                                                    Product ID #{item.productId} <span style={{ opacity: 0.6 }}>x {item.quantity}</span>
-                                                </Typography>
-                                                <Typography fontWeight="bold">₹{item.price * item.quantity}</Typography>
-                                            </Box>
-                                        ))}
-                                    </Stack>
-                                </Grid>
-                                <Grid item xs={12} md={4} sx={{ textAlign: 'right' }}>
-                                    <Typography color="text.secondary">Total Amount Paid</Typography>
-                                    <Typography variant="h4" fontWeight="800" color="primary">
-                                        ₹{order.totalAmount}
-                                    </Typography>
-                                    {order.stripeSessionId && (
-                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                            Payment Ref: {order.stripeSessionId}
+                                        {/* Items summary */}
+                                        <Box>
+                                            <Typography sx={{ color: '#64748b', fontSize: '0.82rem' }}>
+                                                {order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? 's' : ''}
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ color: '#1e293b' }}>
+                                                {order.items?.map(i => `×${i.quantity}`).join(', ')}
+                                            </Typography>
+                                        </Box>
+
+                                        {/* Status badge */}
+                                        <Box sx={{ px: 1.5, py: 0.5, border: `1px solid ${s.border}`, bgcolor: s.bg, display: 'inline-flex', borderRadius: '4px', width: 'fit-content' }}>
+                                            <Typography sx={{ color: s.color, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em' }}>
+                                                {s.label.toUpperCase()}
+                                            </Typography>
+                                        </Box>
+
+                                        {/* Total */}
+                                        <Typography fontWeight="800" sx={{ color: '#a78bfa', fontSize: '1.05rem', letterSpacing: '-0.02em' }}>
+                                            ₹{order.totalAmount}
                                         </Typography>
+                                    </Box>
+
+                                    {/* Mobile layout */}
+                                    <Box sx={{ display: { xs: 'block', md: 'none' }, p: 3 }}>
+                                        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
+                                            <Box>
+                                                <Typography fontWeight="700" sx={{ color: '#e2e8f0', fontSize: '0.875rem' }}>Order #{order.id}</Typography>
+                                                <Typography variant="caption" sx={{ color: '#334155' }}>
+                                                    {order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                                </Typography>
+                                            </Box>
+                                            <Box sx={{ px: 1.5, py: 0.5, border: `1px solid ${s.border}`, bgcolor: s.bg, borderRadius: '4px' }}>
+                                                <Typography sx={{ color: s.color, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em' }}>
+                                                    {s.label.toUpperCase()}
+                                                </Typography>
+                                            </Box>
+                                        </Box>
+                                        <Typography fontWeight="800" sx={{ color: '#a78bfa', fontSize: '1.2rem', letterSpacing: '-0.02em' }}>
+                                            ₹{order.totalAmount}
+                                        </Typography>
+                                    </Box>
+
+                                    {/* Expanded items */}
+                                    {order.items && order.items.length > 0 && (
+                                        <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.05)', bgcolor: '#0f0f1a' }}>
+                                            {order.items.map((item, i) => (
+                                                <Box key={i} sx={{
+                                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                    px: 3, py: 1.8,
+                                                    borderBottom: i < order.items.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none'
+                                                }}>
+                                                    <Typography sx={{ color: '#475569', fontSize: '0.82rem' }}>
+                                                        Product #{item.productId}{' '}
+                                                        <span style={{ color: '#1e293b', marginLeft: 8 }}>× {item.quantity}</span>
+                                                    </Typography>
+                                                    <Typography sx={{ color: '#64748b', fontSize: '0.82rem', fontWeight: 600 }}>
+                                                        ₹{(item.price * item.quantity).toFixed(2)}
+                                                    </Typography>
+                                                </Box>
+                                            ))}
+                                        </Box>
                                     )}
-                                </Grid>
-                            </Grid>
-                        </Paper>
-                    ))}
-                </Stack>
-            )}
-        </Container>
+                                </Box>
+                            );
+                        })}
+                    </Stack>
+                )}
+            </Container>
+        </Box>
     );
 };
 
